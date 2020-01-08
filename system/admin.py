@@ -1,6 +1,6 @@
 from django import forms
 from django.contrib import admin, messages
-from django.contrib.auth.admin import UserAdmin
+from django.contrib.auth.admin import UserAdmin, GroupAdmin
 from django.db.models import ProtectedError
 from django.http import HttpResponseRedirect
 from django.urls import reverse
@@ -8,8 +8,7 @@ from guardian.admin import GuardedModelAdmin
 from mptt.admin import DraggableMPTTAdmin
 from mptt.forms import TreeNodeChoiceField
 
-from system.models import Organization
-from system.models.user import User
+from system.models import Organization, Role, User, Group
 
 admin.site.site_title = "后台管理"
 admin.site.site_header = "后台管理"
@@ -32,7 +31,7 @@ class UserInfoAdmin(UserAdmin, GuardedModelAdmin):
         ('Permissions', {
             'fields': ('is_active', 'is_staff', 'is_superuser', 'organization', 'groups', 'user_permissions'),
         }),
-        ('Important dates', {'fields': ('last_login', 'create_time')}),
+        ('Important dates', {'fields': ('last_login', 'created_time')}),
     )
     add_fieldsets = (
         (None, {
@@ -40,11 +39,11 @@ class UserInfoAdmin(UserAdmin, GuardedModelAdmin):
         }),
     )
 
-    readonly_fields = ('last_login', 'create_time')
+    readonly_fields = ('last_login', 'created_time')
     list_display = ('username', 'avatar', 'phone', 'email', 'organization')
     list_filter = ('is_active', 'is_staff', 'groups', 'organization',)
     search_fields = ('username', 'phone', 'nickname')
-    date_hierarchy = 'create_time'
+    date_hierarchy = 'created_time'
     actions_selection_counter = True
     list_editable = ('phone', 'email',)
     list_per_page = 100
@@ -67,10 +66,10 @@ class UserInfoAdmin(UserAdmin, GuardedModelAdmin):
 @admin.register(Organization)
 class OrganizationAdmin(DraggableMPTTAdmin):
     fieldsets = [
-        (None, {'fields': ('name', 'parent', 'desc', 'maximum_users')})
+        (None, {'fields': ('name', 'parent', 'desc')})
     ]
-    list_display = ('tree_actions', 'indented_title', 'desc', 'create_time', 'update_time',)
-    list_filter = ('create_time', 'update_time',)
+    list_display = ('tree_actions', 'indented_title', 'desc', 'created_time', 'updated_time',)
+    list_filter = ('created_time', 'updated_time',)
     search_fields = ('name',)
     list_display_links = ('indented_title',)
     mptt_level_indent = 20
@@ -101,4 +100,36 @@ class OrganizationAdmin(DraggableMPTTAdmin):
     #     return field
 
 
+@admin.register(Role)
+class RoleAdmin(DraggableMPTTAdmin):
+    fieldsets = [
+        (None, {'fields': ('name', 'parent', 'desc', 'permissions')})
+    ]
+    list_display = ('tree_actions', 'indented_title', 'desc', 'created_time', 'updated_time',)
+    list_filter = ('created_time', 'updated_time',)
+    search_fields = ('name',)
+    list_display_links = ('indented_title',)
+    mptt_level_indent = 20
+    filter_horizontal = ('permissions',)
+
+    def delete_selected_tree(self, modeladmin, request, queryset):
+        try:
+            return super().delete_selected_tree(modeladmin, request, queryset)
+        except ProtectedError:
+            msg = "You cannot delete an object with children"
+            self.message_user(request, msg, messages.ERROR)
+            opts = self.model._meta
+            return_url = reverse(
+                'admin:%s_%s_changelist' % (opts.app_label, opts.model_name),
+                current_app=self.admin_site.name,
+            )
+            return HttpResponseRedirect(return_url)
+
+
+@admin.register(Group)
+class GroupInfoAdmin(GroupAdmin, DraggableMPTTAdmin):
+    fieldsets = [
+        (None, {'fields': ('name', 'parent', 'desc', 'roles', 'permissions')})
+    ]
+    filter_horizontal = ('roles', 'permissions',)
 
